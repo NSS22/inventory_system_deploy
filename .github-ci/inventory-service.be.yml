@@ -1,0 +1,66 @@
+include:
+  # Dev Environment is default
+  - local: .gitlab-ci/env.dev.yml
+  # Allow deploy to dynamic environments
+  - local: .gitlab-ci/env.dynamic.yml
+    rules:
+      - if: $CI_COMMIT_REF_NAME =~ /^(feature|bugfix)\/.+$/
+  # UAT Environment
+  - local: .gitlab-ci/env.uat.yml
+    rules:
+      - if: $SOURCE_BRANCH =~ /^(release|release\/.+)$/
+  # PREPROD Environment
+  - local: .gitlab-ci/env.preProd.yml
+    rules:
+      - if: $SOURCE_BRANCH =~ /^(main)$/
+  # PROD Deploy work-around
+  - local: .gitlab-ci/env.prod.yml
+    rules:
+      - if: $SOURCE_BRANCH =~ /^(main)$/ && $ISOLEMNLYSWEAR == 'IMUPTONOGOOD'
+  # END ENVIRONMENT DEFINITIONS
+
+deploy:
+  stage: release
+  extends: .terraform:apply
+  needs:
+    - project: $SOURCE_REPO
+      job: build
+      ref: $SOURCE_BRANCH
+      artifacts: true
+  cache: []
+  variables:
+    WORKSPACE: $ENVIRONMENT
+    TF_DIRECTORY: RELEASE/NRE-Njp
+    TF_VAR_environment: $ENVIRONMENT
+    TF_VAR_app_version: $IMAGE_VER
+  rules:
+    - if: $SOURCE_BRANCH =~ /^(main|release|develop)$/
+    - if: $SOURCE_BRANCH =~ /^(feature\/.+)$/
+      when: manual
+
+nre-njp:change SSM parameters:
+  extends: .awscli
+  variables:
+    parameterPrefix: "/rdg-nre/${ENVIRONMENT}"
+  script:
+    - ssmSet() { [ -z "${!1}" ] || aws ssm put-parameter --type SecureString --name "$parameterPrefix/${1}" --value "${!1}" --overwrite;}
+    - ssmSet "rtjp_jp_url"
+    - ssmSet "rtjp_calling_points_url"
+    - ssmSet "rtjp_journey_cycle_policy_url"
+    - ssmSet "rtjp_toc_cycle_policy_url"
+    - ssmSet "rtjp_generate_handoff_url"
+    - ssmSet "rtjp_update_handoff_status_url"
+    - ssmSet "rtjp_get_vendors_url"
+    - ssmSet "idms_bucket_name"
+    - ssmSet "GOOGLE_API_SERVICE_ACCOUNT_KEY"
+    - ssmSet "ANDROID_APP_ID"
+    - ssmSet "ANDROID_AD_FREE_PRODUCT_ID"
+    - ssmSet "TPA_ALERTS_URL"
+    - ssmSet "INFOBIP_API_KEY"
+    - ssmSet "ALERTS_VERIFICATION_SALT"
+    - ssmSet "INFOBIP_APPLICATION_ID"
+    - ssmSet "INFOBIP_SMS_MESSAGE_ID"
+    - ssmSet "INFOBIP_EMAIL_MESSAGE_ID"
+
+  # rules:
+  #   - if: $SOURCE_BRANCH !~ /^(main|release|develop)$/

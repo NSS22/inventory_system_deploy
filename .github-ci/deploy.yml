@@ -1,0 +1,36 @@
+deploy:
+  stage: deploy
+  trigger:
+    project: rail-delivery-group/rdg-nre/nre-deploy
+    branch: develop
+    forward:
+      pipeline_variables: true
+  variables:
+    SOURCE_REPO: $CI_PROJECT_PATH
+    SOURCE_BRANCH: $CI_COMMIT_REF_NAME
+    IMAGE_NAME: $CI_PROJECT_NAME
+    IMAGE_VER: $CI_COMMIT_SHORT_SHA
+  rules:
+    - if: $CI_COMMIT_REF_NAME =~ /^(develop|(feature|bugfix)\/.+)$/
+    - if: $CI_MERGE_REQUEST_ID
+      when: never
+
+deploy:uat:
+  extends: deploy
+  trigger:
+    branch: release
+  rules:
+    - if: $CI_COMMIT_REF_NAME =~ /^release$/
+
+deploy:preprod:
+  extends: deploy
+  trigger:
+    branch: main
+  rules:
+    - if: $CI_COMMIT_REF_NAME =~ /^main$/
+
+debug:
+  stage: .pre
+  image: bash:latest
+  script:
+    - env | sort

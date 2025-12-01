@@ -1,0 +1,53 @@
+.terraform:
+  image:
+    name: hashicorp/terraform:1.6.6
+    # name: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/terraform:1.2.3
+    entrypoint: ["/bin/sh", "-c"]
+  resource_group: $ACCOUNT
+  cache: []
+  variables:
+    TF_VAR_project: $PROJECT
+    TF_VAR_domain: $DOMAIN
+    TF_VAR_environment: $ACCOUNT
+    TF_DIRECTORY: Environment
+    WORKSPACE: $ENVIRONMENT
+  before_script:
+    - |
+      [ -z "$TF_DIRECTORY" ] || cd $TF_DIRECTORY
+      [ -d .terraform ] || terraform init --backend-config="bucket=${PROJECT}-${ACCOUNT}-terraform-state" --backend-config="dynamodb_table=${PROJECT}-tf-state-lock"
+      export TICKET_NO=$(expr "$SOURCE_BRANCH" : '.*/\([a-z]*-[0-9]*\)')
+      [ -z "$TICKET_NO" ] || export WORKSPACE=$TICKET_NO
+      terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+      terraform workspace list
+  allow_failure: false
+
+.terraform:plan:
+  extends: .terraform
+  artifacts:
+    reports:
+      terraform: ${CI_COMMIT_SHA}-${TF_DIRECTORY}.json
+    paths:
+      - ${CI_COMMIT_SHA}.tfplan
+  script:
+    - terraform validate
+    - apk add jq
+    - terraform plan -out=${CI_COMMIT_SHA}.tfplan
+    - terraform show --json ${CI_COMMIT_SHA}.tfplan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ${CI_PROJECT_DIR}/${CI_COMMIT_SHA}-${TF_DIRECTORY}.json
+
+.terraform:apply:
+  extends: .terraform
+  script:
+    - terraform apply -auto-approve $TFOPTIONS
+
+.terraform:destroy:
+  stage: .post
+  extends: .terraform
+  environment:
+    name: $ACCOUNT/$ENVIRONMENT
+    action: stop
+  script:
+    - |
+      terraform destroy -auto-approve
+      terraform workspace select default
+      terraform workspace delete $WORKSPACE
+  when: manual
