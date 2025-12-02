@@ -60,7 +60,7 @@ resource "aws_api_gateway_rest_api" "inventory_system" {
             httpMethod           = "POST"
             payloadFormatVersion = "1.0"
             type                 = "AWS_PROXY"
-            uri                  = "${}"
+            uri                  = "${aws_lambda_function.inventory-system-proxy.invoke_arn}"
           }
         }
         options = local.corsOptions

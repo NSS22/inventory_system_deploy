@@ -19,3 +19,11 @@ variable "project" {
 variable "domain" {
   type = string
 }
+
+variable "app_version" {
+  type = string
+}
+
+variable "account_id" {
+  type = string
+}
